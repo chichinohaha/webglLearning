@@ -112,7 +112,7 @@ export default class App extends Vue {
     } else if (this.camera.pitch < -89) {
       this.camera.pitch = -89
     }
-
+    this.camera.updateCameraVectors()
   }
   tick() {
 

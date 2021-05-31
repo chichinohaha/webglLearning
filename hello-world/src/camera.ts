@@ -24,7 +24,7 @@ export default class Camera {
 		vec3.add(center, this.position, this.front)
 		return mat4.lookAt(outMat4, this.position, center, this.up)
 	}
-	private updateCameraVectors() {
+	public updateCameraVectors() {
 		const x = Math.cos(glMatrix.toRadian(this.yaw)) * Math.cos(glMatrix.toRadian(this.pitch))
 		const y = Math.sin(glMatrix.toRadian(this.pitch))
 		const z = Math.sin(glMatrix.toRadian(this.yaw)) * Math.cos(glMatrix.toRadian(this.pitch))

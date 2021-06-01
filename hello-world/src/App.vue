@@ -5,6 +5,7 @@
 </template>
 
 <script lang="ts">
+
 import { Options, Vue } from 'vue-class-component'
 const sizeOfFloat = 4
 import fs from 'raw-loader!../public/fragment.fs'
@@ -79,40 +80,46 @@ export default class App extends Vue {
   gl: WebGLRenderingContext | null = null
   shader!: Shader
   buffers!: WebGLBuffer
+  isControlling = false
   handleKeyboardEvent(event: KeyboardEvent) {
     this.keyboardMap[event.key] = event.type === 'keydown';
   }
   processInput() {
-    const cameraSpeed = 0.005
-    if (this.keyboardMap['w']) {
-      vec3.add(this.camera.position, this.camera.position, vec3.scale(vec3.create(), this.camera.front, cameraSpeed))
-    }
-    if (this.keyboardMap['s']) {
-      vec3.add(this.camera.position, this.camera.position, vec3.scale(vec3.create(), this.camera.front, -cameraSpeed))
-    }
-    if (this.keyboardMap['a']) {
-      vec3.add(this.camera.position, this.camera.position, vec3.scale(vec3.create(), this.camera.right, -cameraSpeed))
-    }
-    if (this.keyboardMap['d']) {
-      vec3.add(this.camera.position, this.camera.position, vec3.scale(vec3.create(), this.camera.right, cameraSpeed))
-    }
-    if (this.keyboardMap['q']) {
-      vec3.add(this.camera.position, this.camera.position, vec3.scale(vec3.create(), this.camera.up, -cameraSpeed))
-    }
-    if (this.keyboardMap['e']) {
-      vec3.add(this.camera.position, this.camera.position, vec3.scale(vec3.create(), this.camera.up, cameraSpeed))
+    if (this.isControlling) {
+      const cameraSpeed = 0.005
+      if (this.keyboardMap['w']) {
+        vec3.add(this.camera.position, this.camera.position, vec3.scale(vec3.create(), this.camera.front, cameraSpeed))
+      }
+      if (this.keyboardMap['s']) {
+        vec3.add(this.camera.position, this.camera.position, vec3.scale(vec3.create(), this.camera.front, -cameraSpeed))
+      }
+      if (this.keyboardMap['a']) {
+        vec3.add(this.camera.position, this.camera.position, vec3.scale(vec3.create(), this.camera.right, -cameraSpeed))
+      }
+      if (this.keyboardMap['d']) {
+        vec3.add(this.camera.position, this.camera.position, vec3.scale(vec3.create(), this.camera.right, cameraSpeed))
+      }
+      if (this.keyboardMap['q']) {
+        vec3.add(this.camera.position, this.camera.position, vec3.scale(vec3.create(), this.camera.up, -cameraSpeed))
+      }
+      if (this.keyboardMap['e']) {
+        vec3.add(this.camera.position, this.camera.position, vec3.scale(vec3.create(), this.camera.up, cameraSpeed))
+      }
+
     }
   }
   handleMouseEvent(event: MouseEvent) {
-    const sensitivity = 0.05
-    this.camera.yaw += event.movementX * sensitivity
-    this.camera.pitch -= event.movementY * sensitivity
-    if (this.camera.pitch > 89) {
-      this.camera.pitch = 89
-    } else if (this.camera.pitch < -89) {
-      this.camera.pitch = -89
+    if (this.isControlling) {
+      const sensitivity = 0.05
+      this.camera.yaw += event.movementX * sensitivity
+      this.camera.pitch -= event.movementY * sensitivity
+      if (this.camera.pitch > 89) {
+        this.camera.pitch = 89
+      } else if (this.camera.pitch < -89) {
+        this.camera.pitch = -89
+      }
+      this.camera.updateCameraVectors()
     }
-    this.camera.updateCameraVectors()
   }
   tick() {
 
@@ -142,9 +149,61 @@ export default class App extends Vue {
     this.processInput()
     requestAnimationFrame(this.tick)
   }
+  fullscreenChange() {
+    //@ts-ignore
+    if (document.webkitFullscreenElement === this.$el ||
+      //@ts-ignore
+      document.mozFullscreenElement === this.$el ||
+      //@ts-ignore
+      document.mozFullScreenElement === this.$el) { // 较旧的 API 大写 'S'.
+      // 元素进入全屏模式了，现在我们可以请求指针锁定。
+      this.$el.requestPointerLock = this.$el.requestPointerLock ||
+        this.$el.mozRequestPointerLock ||
+        this.$el.webkitRequestPointerLock;
+      this.$el.requestPointerLock();
+    } else {
+
+    }
+  }
+  pointerLockChange() {
+    //@ts-ignore
+    if (
+      document.pointerLockElement === this.$el ||
+      //@ts-ignore
+      document.mozPointerLockElement === this.$el ||
+      //@ts-ignore
+      document.webkitPointerLockElement === this.$el) {
+      this.isControlling = true
+      console.log("指针锁定成功了。");
+    } else {
+      this.isControlling = false
+      console.log("指针锁定已丢失。");
+
+    }
+  }
+  lockPointer() {
+    this.$el.requestPointerLock = this.$el.requestPointerLock ||
+      this.$el.mozRequestPointerLock ||
+      this.$el.webkitRequestPointerLock;
+    this.$el.requestPointerLock();
+
+  }
   mounted() {
 
     let canvas: HTMLCanvasElement
+
+    document.addEventListener('pointerlockchange', this.pointerLockChange, false);
+    document.addEventListener('mozpointerlockchange', this.pointerLockChange, false);
+    document.addEventListener('webkitpointerlockchange', this.pointerLockChange, false);
+
+    function pointerLockError() {
+      console.log("锁定指针时出错。");
+    }
+
+    document.addEventListener('pointerlockerror', pointerLockError, false);
+    document.addEventListener('mozpointerlockerror', pointerLockError, false);
+    document.addEventListener('webkitpointerlockerror', pointerLockError, false);
+
 
     canvas = this.canvas = (this.$el as HTMLElement).querySelector(
       'canvas'
@@ -160,6 +219,7 @@ export default class App extends Vue {
     gl.bindBuffer(gl.ARRAY_BUFFER, buffers)
 
     this.camera = new Camera(gl, [0, 0, 3])
+    window.addEventListener('mousedown', this.lockPointer)
     window.addEventListener('mousemove', this.handleMouseEvent)
     window.onkeydown = window.onkeyup = this.handleKeyboardEvent
 
@@ -169,7 +229,4 @@ export default class App extends Vue {
 </script>
 
 <style>
-* {
-  cursor: none !important;
-}
 </style>

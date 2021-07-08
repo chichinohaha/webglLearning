@@ -13,38 +13,53 @@ import Shader from './shader'
 export default class App extends Vue {
   gl!: WebGLRenderingContext | null;
   canvas!: HTMLCanvasElement;
+  shader!: Shader;
   mounted() {
-    const canvas = this.canvas = document.querySelector('#canvas') as HTMLCanvasElement
+    this.canvas = document.querySelector('#canvas') as HTMLCanvasElement
     const gl = this.gl = this.canvas.getContext('webgl')
     if (!gl) {
       alert('无法初始化WebGL，你的浏览器、操作系统或硬件等可能不支持WebGL。')
       return
     }
+    const image = document.querySelector('#image') as HTMLImageElement;
+    image.onload = () => {
+      console.log('onload');
+      this.init(image);
+      this.renderMyTexture(image);
+    }
+  }
+  init(image: HTMLImageElement) {
+    const canvas = this.canvas;
+    const gl = this.gl as WebGLRenderingContext;
     // 创建纹理
     var texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
-
-    const image = document.querySelector('#image') as HTMLImageElement;
-
-    const shader = new Shader(gl, vs, fs)
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const shader = this.shader = new Shader(gl, vs, fs)
     // setup GLSL program
     var program = shader.program as WebGLProgram;
-
     // look up where the vertex data needs to go.
     var positionLocation = gl.getAttribLocation(program, "a_position");
     var texcoordLocation = gl.getAttribLocation(program, "a_texCoord");
-
-    // Create a buffer to put three 2d clip space points in
     var positionBuffer = gl.createBuffer();
-
     // Bind it to ARRAY_BUFFER (think of it as ARRAY_BUFFER = positionBuffer)
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
     // Set a rectangle the same size as the image.
-    this.setRectangle(gl, 0, 0, image.width, image.height);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      0, 0,
+      image.width, 0,
+      0, image.height,
+      0, image.height,
+      image.width, 0,
+      image.width, image.height,
+    ]), gl.STATIC_DRAW);
+    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
-    // provide texture coordinates for the rectangle.
+    // 申请uv的缓冲
     var texcoordBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, texcoordBuffer);
+    // 往缓冲区注入uv数据
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
       0.0, 0.0,
       1.0, 0.0,
@@ -53,9 +68,11 @@ export default class App extends Vue {
       1.0, 0.0,
       1.0, 1.0,
     ]), gl.STATIC_DRAW);
+    gl.vertexAttribPointer(texcoordLocation, 2, gl.FLOAT, false, 0, 0);
 
-    // Create a texture.
+    //创建纹理缓冲
     var texture = gl.createTexture();
+    //绑定纹理
     gl.bindTexture(gl.TEXTURE_2D, texture);
 
     // Set the parameters so we can render any size image.
@@ -63,76 +80,24 @@ export default class App extends Vue {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-
     // Upload the image into the texture.
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-
-    // lookup uniforms
-    var resolutionLocation = gl.getUniformLocation(program, "u_resolution");
-    canvas.width = image.width;
-    canvas.height = image.height;
     // Tell WebGL how to convert from clip space to pixels
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.enableVertexAttribArray(positionLocation);
+    gl.enableVertexAttribArray(texcoordLocation);
 
+  }
+  renderMyTexture(image: HTMLImageElement) {
+    const gl = this.gl as WebGLRenderingContext;
     // Clear the canvas
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     // Tell it to use our program (pair of shaders)
-    gl.useProgram(program);
-
-    // Turn on the position attribute
-    gl.enableVertexAttribArray(positionLocation);
-
-    // Bind the position buffer.
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-
-    // Tell the position attribute how to get data out of positionBuffer (ARRAY_BUFFER)
-    var size = 2;          // 2 components per iteration
-    var type = gl.FLOAT;   // the data is 32bit floats
-    var normalize = false; // don't normalize the data
-    var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
-    var offset = 0;        // start at the beginning of the buffer
-    gl.vertexAttribPointer(
-      positionLocation, size, type, normalize, stride, offset);
-
-    // Turn on the texcoord attribute
-    gl.enableVertexAttribArray(texcoordLocation);
-
-    // bind the texcoord buffer.
-    gl.bindBuffer(gl.ARRAY_BUFFER, texcoordBuffer);
-
-    // Tell the texcoord attribute how to get data out of texcoordBuffer (ARRAY_BUFFER)
-    var size = 2;          // 2 components per iteration
-    var type = gl.FLOAT;   // the data is 32bit floats
-    var normalize = false; // don't normalize the data
-    var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
-    var offset = 0;        // start at the beginning of the buffer
-    gl.vertexAttribPointer(
-      texcoordLocation, size, type, normalize, stride, offset);
-
-    // set the resolution
-    gl.uniform2f(resolutionLocation, gl.canvas.width, gl.canvas.height);
-
-    // Draw the rectangle.
-    var primitiveType = gl.TRIANGLES;
-    var offset = 0;
-    var count = 6;
-    gl.drawArrays(primitiveType, offset, count);
-  }
-  setRectangle(gl: WebGLRenderingContext, x: number, y: number, width: number, height: number) {
-    var x1 = x;
-    var x2 = x + width;
-    var y1 = y;
-    var y2 = y + height;
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-      x1, y1,
-      x2, y1,
-      x1, y2,
-      x1, y2,
-      x2, y1,
-      x2, y2,
-    ]), gl.STATIC_DRAW);
+    this.shader.use()
+    this.shader.setVec2("u_resolution", gl.canvas.width, gl.canvas.height);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
 }
 </script>

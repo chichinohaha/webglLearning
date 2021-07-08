@@ -1,19 +1,38 @@
 <template>
-  <canvas id="canvas">
-    <img id="image" src="./assets/tweener.png">
-  </canvas>
+  <div>
+    <canvas id="canvas">
+      <img id="image" src="./assets/tweener.png">
+    </canvas>
+    <select v-model="index">
+      <option value="0">R</option>
+      <option value="1">G</option>
+      <option value="2">B</option>
+    </select>
+  </div>
 </template>
 
 <script lang="ts">
 import { Vue } from 'vue-class-component';
+import { Watch } from 'vue-property-decorator'
 import vs from 'raw-loader!../public/vs.vs'
 import fs from 'raw-loader!../public/fs.fs'
 import Shader from './shader'
+
 
 export default class App extends Vue {
   gl!: WebGLRenderingContext | null;
   canvas!: HTMLCanvasElement;
   shader!: Shader;
+  image!: HTMLImageElement;
+
+  index: 0 | 1 | 2 = 0;
+  @Watch('index')
+  onIndexChange() {
+    if (this.image && this.image.complete) {
+      this.renderMyTexture(this.image)
+    }
+  }
+
   mounted() {
     this.canvas = document.querySelector('#canvas') as HTMLCanvasElement
     const gl = this.gl = this.canvas.getContext('webgl')
@@ -21,7 +40,7 @@ export default class App extends Vue {
       alert('无法初始化WebGL，你的浏览器、操作系统或硬件等可能不支持WebGL。')
       return
     }
-    const image = document.querySelector('#image') as HTMLImageElement;
+    const image = this.image = document.querySelector('#image') as HTMLImageElement;
     image.onload = () => {
       console.log('onload');
       this.init(image);
@@ -82,14 +101,18 @@ export default class App extends Vue {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     // Upload the image into the texture.
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-    // Tell WebGL how to convert from clip space to pixels
-    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
     gl.enableVertexAttribArray(positionLocation);
     gl.enableVertexAttribArray(texcoordLocation);
 
   }
   renderMyTexture(image: HTMLImageElement) {
+    const canvas = this.canvas;
     const gl = this.gl as WebGLRenderingContext;
+    canvas.width = image.width;
+    canvas.height = image.height;
+    // Tell WebGL how to convert from clip space to pixels
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
     // Clear the canvas
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -97,6 +120,7 @@ export default class App extends Vue {
     // Tell it to use our program (pair of shaders)
     this.shader.use()
     this.shader.setVec2("u_resolution", gl.canvas.width, gl.canvas.height);
+    this.shader.setUniform("u_index", this.index)
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
 }

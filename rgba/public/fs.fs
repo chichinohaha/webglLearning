@@ -9,12 +9,15 @@ varying vec2 v_texCoord;
 
 void main() {
    vec4 color = texture2D(u_image, v_texCoord);
-   vec4 result = vec4(0,0,0,1);
-   for(int i = 0; i < 3; i++) {
+   vec4 result = vec4(0, 0, 0, 0);
+   int i = 0;
+   for(; i < 4; i++) {
       if(i == u_index) {
-         result[i]=color[i];
-         continue;
+         i = u_index;
+         break;
       }
    }
+   result = vec4(color[i], color[i], color[i], 1);
+
    gl_FragColor = result;
 }

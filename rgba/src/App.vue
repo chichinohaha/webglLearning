@@ -1,12 +1,13 @@
 <template>
   <div>
     <canvas id="canvas">
-      <img id="image" src="./assets/tweener.png">
+      <img id="image" src="@/assets/food.png">
     </canvas>
     <select v-model="index">
       <option value="0">R</option>
       <option value="1">G</option>
       <option value="2">B</option>
+      <option value="3">A</option>
     </select>
   </div>
 </template>
@@ -18,18 +19,21 @@ import vs from 'raw-loader!../public/vs.vs'
 import fs from 'raw-loader!../public/fs.fs'
 import Shader from './shader'
 
-
 export default class App extends Vue {
   gl!: WebGLRenderingContext | null;
   canvas!: HTMLCanvasElement;
   shader!: Shader;
   image!: HTMLImageElement;
 
-  index: 0 | 1 | 2 = 0;
+  index: 0 | 1 | 2 | 3 = 0;
   @Watch('index')
   onIndexChange() {
     if (this.image && this.image.complete) {
       this.renderMyTexture(this.image)
+      var gl = this.gl as WebGLRenderingContext;
+      var pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+      gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+      console.log(pixels); // Uint8Array
     }
   }
 

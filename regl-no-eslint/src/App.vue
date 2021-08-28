@@ -9,67 +9,173 @@ import { Options, Vue } from 'vue-class-component'
 
 export default class App extends Vue {
   mounted () {
-    /*
-  tags: advanced, physics
+/*
+  tags: advanced
 
   <p>
-  In this example, it is shown how you can integrate ammo.js into
-  regl, and use it to create a simple physics simulation. By clicking,
-  you are able to shoot balls at the wall.
+  In this demo, it is shown how to implement 3D object picking.
+  If you click on an object, an outline is drawn around it.
   </p>
-*/
+ */
 
-    const canvas = document.body.appendChild(document.createElement('canvas'))
-    const fit = require('canvas-fit')
-    const regl = require('regl')({ canvas: canvas })
-    const mat4 = require('gl-mat4')
-    const vec3 = require('gl-vec3')
-    var mp = require('mouse-position')(canvas)
-    var mb = require('mouse-pressed')(canvas)
+const canvas = document.body.appendChild(document.createElement('canvas'))
+const fit = require('canvas-fit')
+const regl = require('regl')({ canvas: canvas })
+const mat4 = require('gl-mat4')
+const vec3 = require('gl-vec3')
+window.addEventListener('resize', fit(canvas), false)
+const bunny = require('bunny')
+const normals = require('angle-normals')
+var mp = require('mouse-position')(canvas)
+var mb = require('mouse-pressed')(canvas)
 
-    window.addEventListener('resize', fit(canvas), false)
+var viewMatrix = new Float32Array([1, -0, 0, 0, 0, 0.876966655254364, 0.48055124282836914, 0, -0, -0.48055124282836914, 0.876966655254364, 0, 0, 0, -11.622776985168457, 1])
+var projectionMatrix = new Float32Array(16)
 
-    var ammo = require('./util/ammo.js')
+// Below is a slightly modified version of this code:
+// https://github.com/substack/ray-triangle-intersection
+// It does intersection between ray and triangle.
+// With the original version, we had no way of accessing 't'
+// But we really needed that value.
+/**
+ * 
+ * @param {[number,number,number]} out 
+ * @param {[number,number,number]} pt 
+ * @param {[number,number,number]} dir 
+ * @param {[number,number,number]} tri 
+ */
+function intersectTriangle (out, pt, dir, tri) {
+//#region old code
+  // var EPSILON = 0.000001
+  // var edge1 = [0, 0, 0]
+  // var edge2 = [0, 0, 0]
+  // var tvec = [0, 0, 0]
+  // var pvec = [0, 0, 0]
+  // var qvec = [0, 0, 0]
+  
+  // vec3.subtract(edge1, tri[1], tri[0])
+  // vec3.subtract(edge2, tri[2], tri[0])
 
-       oid standardJs errors.
-    const BtVector3 = ammo.btVector3
-    const BtCollisionDispatcher = ammo.btCollisionDispatcher
-    const BtDefaultCollisionConfiguration = ammo.btDefaultCollisionConfiguration
-    const BtDbvtBroadphase = ammo.btDbvtBroadphase
-    const BtSequentialImpulseConstraintSolver = ammo.btSequentialImpulseConstraintSolver
-    const BtDiscreteDynamicsWorld = ammo.btDiscreteDynamicsWorld
-    const BtStaticPlaneShape = ammo.btStaticPlaneShape
-    const BtDefaultMotionState = ammo.btDefaultMotionState
-    const BtTransform = ammo.btTransform
-    const BtQuaternion = ammo.btQuaternion
-    const BtRigidBody = ammo.btRigidBody
-    const BtRigidBodyConstructionInfo = ammo.btRigidBodyConstructionInfo
-    const BtBoxShape = ammo.btBoxShape
-    const BtSphereShape = ammo.btSphereShape
+  // vec3.cross(pvec, dir, edge2)
+  // var det = vec3.dot(edge1, pvec)
 
-    var viewMatrix = new Float32Array(16)
-    var projectionMatrix = new Float32Array(16)
+  // if (det < EPSILON) return null
+  // vec3.subtract(tvec, pt, tri[0])
+  // var u = vec3.dot(tvec, pvec)
+  // if (u < 0 || u > det) return null
+  // vec3.cross(qvec, tvec, edge1)
+  // var v = vec3.dot(dir, qvec)
+  // if (v < 0 || u + v > det) return null
 
-    // keeps track of all global state.
-    const globalScope = regl({
-      uniforms: {
-        lightDir: [0.92, 0.3, 0.2],
-        projection: ({ viewportWidth, viewportHeight }) => {
-          return mat4.perspective(projectionMatrix, Math.PI / 4, viewportWidth / viewportHeight, 0.01, 1000.0)
-        },
-        view: ({ tick }) => {
-          var s = 0.8
-          return mat4.lookAt(viewMatrix,
-            [50 * s, 9.5, 30 * s],
-            [0, 2.5, 0],
-            [0, 1, 0])
-        }
-      }
-    })
+  // var t = vec3.dot(edge2, qvec) / det
+  // out[0] = pt[0] + t * dir[0]
+  // out[1] = pt[1] + t * dir[1]
+  // out[2] = pt[2] + t * dir[2]
+  // return t
+//#endregion
+  var [a,b,c] = tri;
+  var e1 = vec3.sub([],a,c)
+  var e2 = vec3.sub([],b,c)
+  var normal = vec3.cross([],e1,e2)
+  var pointToTri = vec3.sub([],c,pt)
+  var rayDelta = vec3.dot([],dir,normal)
+  var vp = vec3.dot(dir,normal)
+  var wp = vec3.dot(pointToTri,normal)
+  if(vp <= 0.000001 ){
+    return null
+  }
+  var t = wp/vp;
+  var pointInTri = vec3.add([],pt,vec3.scale([],dir,t))
+  var aP = vec3.sub([],pointInTri,a);
+  var bP = vec3.sub([],pointInTri,b);
+  var cP = vec3.sub([],pointInTri,c);
+  var c1 = vec3.cross([],aP,bP)
+  var c2 = vec3.cross([],bP,cP)
+  var c3 = vec3.cross([],cP,aP)
+  var d1 = vec3.dot(normal,c1)
+  var d2 = vec3.dot(normal,c2)
+  var d3 = vec3.dot(normal,c3)
 
-    // render object with phong shading.
-    const drawNormal = regl({
-      frag: `
+  var interect =  d1 > 0 && d2 > 0 && d3 > 0 
+  if(interect){
+    return vec3.len(vec3.sub([],pt,pointToTri))
+  }
+}
+
+//
+// Create plane geometry
+//
+
+const planeElements = []
+var planePosition = []
+var planeNormal = []
+
+planePosition.push([-0.5, 0.0, -0.5])
+planePosition.push([+0.5, 0.0, -0.5])
+planePosition.push([-0.5, 0.0, +0.5])
+planePosition.push([+0.5, 0.0, +0.5])
+
+planeNormal.push([0.0, 1.0, 0.0])
+planeNormal.push([0.0, 1.0, 0.0])
+planeNormal.push([0.0, 1.0, 0.0])
+planeNormal.push([0.0, 1.0, 0.0])
+
+planeElements.push([3, 1, 0])
+planeElements.push([0, 2, 3])
+
+//
+// Create box geometry.
+//
+
+var boxPosition = [
+  // side faces
+  [-0.5, +0.5, +0.5], [+0.5, +0.5, +0.5], [+0.5, -0.5, +0.5], [-0.5, -0.5, +0.5], // positive z face.
+  [+0.5, +0.5, +0.5], [+0.5, +0.5, -0.5], [+0.5, -0.5, -0.5], [+0.5, -0.5, +0.5], // positive x face
+  [+0.5, +0.5, -0.5], [-0.5, +0.5, -0.5], [-0.5, -0.5, -0.5], [+0.5, -0.5, -0.5], // negative z face
+  [-0.5, +0.5, -0.5], [-0.5, +0.5, +0.5], [-0.5, -0.5, +0.5], [-0.5, -0.5, -0.5], // negative x face.
+  [-0.5, +0.5, -0.5], [+0.5, +0.5, -0.5], [+0.5, +0.5, +0.5], [-0.5, +0.5, +0.5], // top face
+  [-0.5, -0.5, -0.5], [+0.5, -0.5, -0.5], [+0.5, -0.5, +0.5], [-0.5, -0.5, +0.5] // bottom face
+]
+
+const boxElements = [
+  [2, 1, 0], [2, 0, 3],
+  [6, 5, 4], [6, 4, 7],
+  [10, 9, 8], [10, 8, 11],
+  [14, 13, 12], [14, 12, 15],
+  [18, 17, 16], [18, 16, 19],
+  [20, 21, 22], [23, 20, 22]
+]
+
+// all the normals of a single block.
+var boxNormal = [
+  // side faces
+  [0.0, 0.0, +1.0], [0.0, 0.0, +1.0], [0.0, 0.0, +1.0], [0.0, 0.0, +1.0],
+  [+1.0, 0.0, 0.0], [+1.0, 0.0, 0.0], [+1.0, 0.0, 0.0], [+1.0, 0.0, 0.0],
+  [0.0, 0.0, -1.0], [0.0, 0.0, -1.0], [0.0, 0.0, -1.0], [0.0, 0.0, -1.0],
+  [-1.0, 0.0, 0.0], [-1.0, 0.0, 0.0], [-1.0, 0.0, 0.0], [-1.0, 0.0, 0.0],
+  // top
+  [0.0, +1.0, 0.0], [0.0, +1.0, 0.0], [0.0, +1.0, 0.0], [0.0, +1.0, 0.0],
+  // bottom
+  [0.0, -1.0, 0.0], [0.0, -1.0, 0.0], [0.0, -1.0, 0.0], [0.0, -1.0, 0.0]
+]
+
+// keeps track of all global state.
+const globalScope = regl({
+  uniforms: {
+    lightDir: [0.39, 0.87, 0.29],
+    view: () => viewMatrix,
+    projection: ({ viewportWidth, viewportHeight }) =>
+      mat4.perspective(projectionMatrix,
+        Math.PI / 4,
+        viewportWidth / viewportHeight,
+        0.01,
+        1000)
+  }
+})
+
+// render object with phong shading.
+const drawNormal = regl({
+  frag: `
   precision mediump float;
 
   varying vec3 vNormal;
@@ -87,7 +193,7 @@ export default class App extends Vue {
 
     gl_FragColor = vec4((ambient + diffuse), 1.0);
   }`,
-      vert: `
+  vert: `
   precision mediump float;
 
   attribute vec3 position;
@@ -102,261 +208,186 @@ export default class App extends Vue {
     vec4 worldSpacePosition = model * vec4(position, 1);
 
     vPosition = worldSpacePosition.xyz;
-    vNormal = (model * vec4(normal, 0)).xyz;
+    vNormal = normal;
 
     gl_Position = projection * view * worldSpacePosition;
   }`
-    })
+})
 
-    function Mesh (elements, position, normal) {
-      this.elements = elements
-      this.position = position
-      this.normal = normal
-    }
+// render the object slightly bigger than it should be.  this is used
+// to draw the outline.  but we don't write to the depth buffer.  this
+// allows us to draw the object(that we wish to draw the outline for)
+// onto the slightly bigger object, thus forming the outine.
+const drawOutline = regl({
+  frag: `
+  precision mediump float;
 
-    Mesh.prototype.draw = regl({
-      uniforms: {
-        model: (_, props, batchId) => {
-          return props.model
-        },
-        ambientLightAmount: 0.3,
-        diffuseLightAmount: 0.7,
-        color: regl.prop('color')
-      },
-      attributes: {
-        position: regl.this('position'),
-        normal: regl.this('normal')
-      },
-      elements: regl.this('elements'),
-      cull: {
-        enable: true
+  void main () {
+    gl_FragColor = vec4(vec3(0.7, 0.6, 0.0), 1.0);
+  }`,
+  vert: `
+  precision mediump float;
+
+  attribute vec3 position;
+  attribute vec3 normal;
+
+  uniform mat4 projection, view, model;
+  uniform bool isRound;
+
+  void main() {
+    float s = 0.19;
+    vec4 worldSpacePosition = model * vec4(
+      // for objects with lots of jagged edges, the ususal approach doesn't work.
+      // We use an alternative way of enlarging the object for such objects.
+      isRound ? (position + normal * s) : (position * (0.3*s+1.0)),
+      1);
+    gl_Position = projection * view * worldSpacePosition;
+  }`,
+
+  depth: {
+    enable: true,
+    mask: false // DONT write to depth buffer!
+  }
+})
+
+function Mesh (elements, position, normal) {
+  this.elements = elements
+  this.position = position
+  this.normal = normal
+}
+
+function createModelMatrix (props) {
+  var m = mat4.identity([])
+
+  mat4.translate(m, m, props.translate)
+
+  var s = props.scale
+  mat4.scale(m, m, [s, s, s])
+
+  return m
+}
+
+Mesh.prototype.draw = regl({
+  uniforms: {
+    model: (_, props, batchId) => {
+      return createModelMatrix(props)
+    },
+    ambientLightAmount: 0.3,
+    diffuseLightAmount: 0.7,
+    color: regl.prop('color'),
+    isRound: regl.prop('isRound')
+  },
+  attributes: {
+    position: regl.this('position'),
+    normal: regl.this('normal')
+  },
+  elements: regl.this('elements'),
+  cull: {
+    enable: true
+  }
+})
+
+var bunnyMesh = new Mesh(bunny.cells, bunny.positions, normals(bunny.cells, bunny.positions))
+var boxMesh = new Mesh(boxElements, boxPosition, boxNormal)
+var planeMesh = new Mesh(planeElements, planePosition, planeNormal)
+
+var meshes = [
+  { scale: 80.0, translate: [0.0, 0.0, 0.0], color: [0.5, 0.5, 0.5], mesh: planeMesh },
+
+  { scale: 0.2, translate: [0.0, 0.0, 0.0], color: [0.6, 0.0, 0.0], mesh: bunnyMesh },
+  { scale: 0.3, translate: [-6.0, 0.0, -3.0], color: [0.6, 0.6, 0.0], mesh: bunnyMesh },
+  { scale: 0.16, translate: [3.0, 0.0, 2.0], color: [0.2, 0.5, 0.6], mesh: bunnyMesh },
+
+  { scale: 2.0, translate: [4.0, 1.0, 0.0], color: [0.6, 0.0, 0.0], mesh: boxMesh },
+  { scale: 1.3, translate: [-3.0, 0.6, -4.0], color: [0.0, 0.6, 0.0], mesh: boxMesh },
+  { scale: 0.7, translate: [-3.0, 0.5, 4.0], color: [0.0, 0.0, 0.8], mesh: boxMesh }
+]
+
+var iSelectedMesh = -1
+
+// on click ,we raycast.
+mb.on('down', function () {
+  var vp = mat4.multiply([], projectionMatrix, viewMatrix)
+  var invVp = mat4.invert([], vp)
+
+  // get a single point on the camera ray.
+  var rayPoint = vec3.transformMat4([], [2.0 * mp[0] / canvas.width - 1.0, -2.0 * mp[1] / canvas.height + 1.0, 0.0], invVp)
+
+  // get the position of the camera.
+  var rayOrigin = vec3.transformMat4([], [0, 0, 0], mat4.invert([], viewMatrix))
+
+  var rayDir = vec3.normalize([], vec3.subtract([], rayPoint, rayOrigin))
+
+  // now we iterate through all meshes, and find the closest mesh that intersects the camera ray.
+  var minT = 10000000.0
+  for (var i = 0; i < meshes.length; i++) {
+    var m = meshes[i]
+
+    var modelMatrix = createModelMatrix(m)
+
+    // we must check all triangles of the mesh.
+    for (var j = 0; j < m.mesh.elements.length; j++) {
+      if (m.mesh === planeMesh ) {
+        continue // we don't allow clicking the plane mesh.
       }
-    })
-
-    // setup physics world.
-    var collisionConfiguration = new BtDefaultCollisionConfiguration()
-    var dispatcher = new BtCollisionDispatcher(collisionConfiguration)
-    var broadphase = new BtDbvtBroadphase()
-    var solver = new BtSequentialImpulseConstraintSolver()
-    var physicsWorld = new BtDiscreteDynamicsWorld(dispatcher, broadphase, solver, collisionConfiguration)
-    physicsWorld.setGravity(new BtVector3(0, -6.0, 0))
-
-    function createPlane ({ color }) {
-      /*
-    First we create the plane mesh.
-    */
-
-      const planeElements = []
-      var planePosition = []
-      var planeNormal = []
-
-      var A = 1000.0 // plane size.
-
-      planePosition.push([-0.5 * A, 0.0, -0.5 * A])
-      planePosition.push([+0.5 * A, 0.0, -0.5 * A])
-      planePosition.push([-0.5 * A, 0.0, +0.5 * A])
-      planePosition.push([+0.5 * A, 0.0, +0.5 * A])
-
-      planeNormal.push([0.0, 1.0, 0.0])
-      planeNormal.push([0.0, 1.0, 0.0])
-      planeNormal.push([0.0, 1.0, 0.0])
-      planeNormal.push([0.0, 1.0, 0.0])
-
-      planeElements.push([3, 1, 0])
-      planeElements.push([0, 2, 3])
-
-      var planeMesh = new Mesh(planeElements, planePosition, planeNormal)
-
-      /*
-    Then we create the rigid body.
-   */
-
-      var shape = new BtStaticPlaneShape(new BtVector3(0, 1, 0), 0)
-      shape.setMargin(0.05)
-      var motionState = new BtDefaultMotionState(new BtTransform(new BtQuaternion(0, 0, 0, 1), new BtVector3(0, 0, 0)))
-      var ci = new BtRigidBodyConstructionInfo(0, motionState, shape, new BtVector3(0, 0, 0))
-      var rigidBody = new BtRigidBody(ci)
-      physicsWorld.addRigidBody(rigidBody)
-
-      return { rigidBody: rigidBody, drawCall: planeMesh, color: color }
-    }
-
-    function createBox ({ color, position, size }) {
-      /*
-    First we create the box mesh
-    */
-      var s = size
-
-      var boxPosition = [
-        // side faces
-        [-0.5, +0.5, +0.5], [+0.5, +0.5, +0.5], [+0.5, -0.5, +0.5], [-0.5, -0.5, +0.5], // positive z face.
-        [+0.5, +0.5, +0.5], [+0.5, +0.5, -0.5], [+0.5, -0.5, -0.5], [+0.5, -0.5, +0.5], // positive x face
-        [+0.5, +0.5, -0.5], [-0.5, +0.5, -0.5], [-0.5, -0.5, -0.5], [+0.5, -0.5, -0.5], // negative z face
-        [-0.5, +0.5, -0.5], [-0.5, +0.5, +0.5], [-0.5, -0.5, +0.5], [-0.5, -0.5, -0.5], // negative x face.
-        [-0.5, +0.5, -0.5], [+0.5, +0.5, -0.5], [+0.5, +0.5, +0.5], [-0.5, +0.5, +0.5], // top face
-        [-0.5, -0.5, -0.5], [+0.5, -0.5, -0.5], [+0.5, -0.5, +0.5], [-0.5, -0.5, +0.5] // bottom face
-      ]
-
-      for (var i = 0; i < boxPosition.length; i++) {
-        var p = boxPosition[i]
-        p[0] *= s[0]
-        p[1] *= s[1]
-        p[2] *= s[2]
-      }
-
-      const boxElements = [
-        [2, 1, 0], [2, 0, 3],
-        [6, 5, 4], [6, 4, 7],
-        [10, 9, 8], [10, 8, 11],
-        [14, 13, 12], [14, 12, 15],
-        [18, 17, 16], [18, 16, 19],
-        [20, 21, 22], [23, 20, 22]
-      ]
-
-      // all the normals of a single block.
-      var boxNormal = [
-        // side faces
-        [0.0, 0.0, +1.0], [0.0, 0.0, +1.0], [0.0, 0.0, +1.0], [0.0, 0.0, +1.0],
-        [+1.0, 0.0, 0.0], [+1.0, 0.0, 0.0], [+1.0, 0.0, 0.0], [+1.0, 0.0, 0.0],
-        [0.0, 0.0, -1.0], [0.0, 0.0, -1.0], [0.0, 0.0, -1.0], [0.0, 0.0, -1.0],
-        [-1.0, 0.0, 0.0], [-1.0, 0.0, 0.0], [-1.0, 0.0, 0.0], [-1.0, 0.0, 0.0],
-        // top
-        [0.0, +1.0, 0.0], [0.0, +1.0, 0.0], [0.0, +1.0, 0.0], [0.0, +1.0, 0.0],
-        // bottom
-        [0.0, -1.0, 0.0], [0.0, -1.0, 0.0], [0.0, -1.0, 0.0], [0.0, -1.0, 0.0]
-      ]
-
-      var boxMesh = new Mesh(boxElements, boxPosition, boxNormal)
-
-      /*
-    Then we create the box rigid body.
-   */
-
-      var mass = 1.0
-      var shape = new BtBoxShape(new BtVector3(s[0] * 0.5, s[1] * 0.5, s[2] * 0.5))
-      shape.setMargin(0.05)
-
-      var motionState = new BtDefaultMotionState(new BtTransform(new BtQuaternion(0, 0, 0, 1), new BtVector3(position[0], position[1], position[2])))
-
-      var localInertia = new BtVector3(0, 0, 0)
-      shape.calculateLocalInertia(mass, localInertia)
-
-      var ci = new BtRigidBodyConstructionInfo(mass, motionState, shape, localInertia)
-      var rigidBody = new BtRigidBody(ci)
-      physicsWorld.addRigidBody(rigidBody)
-
-      return { rigidBody: rigidBody, drawCall: boxMesh, color: color }
-    }
-
-    function shootSphere () {
-      /*
-    First, we need a ray from the camera.
-    Because we need a shooting position, and a shooting direction.
-  */
-      var vp = mat4.multiply([], projectionMatrix, viewMatrix)
-      var invVp = mat4.invert([], vp)
-
-      // get a single point on the camera ray.
-      var rayPoint = vec3.transformMat4([], [2.0 * mp[0] / canvas.width - 1.0, -2.0 * mp[1] / canvas.height + 1.0, 0.0], invVp)
-
-      // get the position of the camera.
-      var rayOrigin = vec3.transformMat4([], [0, 0, 0], mat4.invert([], viewMatrix))
-
-      var rayDir = vec3.normalize([], vec3.subtract([], rayPoint, rayOrigin))
-
-      // we release the ball a bit in front of the camera.
-      vec3.scaleAndAdd(rayOrigin, rayOrigin, rayDir, 4.4)
-
-      /*
-    Next, create the sphere mesh
-    */
-      var mesh = require('primitive-sphere')(1.0, {
-        segments: 16
-      })
-      var sphereMesh = new Mesh(mesh.cells, mesh.positions, mesh.normals)
-
-      /*
-    Then, create the rigid body.
-  */
-      var mass = 1.0
-      var shape = new BtSphereShape(1)
-      shape.setMargin(0.05)
-      var motionState = new BtDefaultMotionState(new BtTransform(new BtQuaternion(0, 0, 0, 1), new BtVector3(rayOrigin[0], rayOrigin[1], rayOrigin[2])))
-
-      var localInertia = new BtVector3(0, 0, 0)
-      shape.calculateLocalInertia(mass, localInertia)
-
-      var ci = new BtRigidBodyConstructionInfo(mass, motionState, shape, localInertia)
-      var rigidBody = new BtRigidBody(ci)
-      physicsWorld.addRigidBody(rigidBody)
-
-      /*
-    Now send the rigid body flying!
-  */
-      var POWER = 80.0
-      rigidBody.applyImpulse(new BtVector3(POWER * rayDir[0], POWER * rayDir[1], POWER * rayDir[2]), new BtVector3(rayOrigin[0], rayOrigin[1], rayOrigin[2]))
-
-      return { rigidBody: rigidBody, drawCall: sphereMesh, color: [1.0, 1.0, 1.0] }
-    }
-
-    var transformTemp = new BtTransform()
-    // extracts the model matrix from a rigid body.
-    function getModelMatrix (rb) {
-      var ms = rb.getMotionState()
-
-      if (ms) {
-        ms.getWorldTransform(transformTemp)
-        var p = transformTemp.getOrigin()
-        var q = transformTemp.getRotation()
-
-        return mat4.fromRotationTranslation(
-          [], [q.x(), q.y(), q.z(), q.w()], [p.x(), p.y(), p.z()])
-      }
-    }
-
-    var objs = [] // contains all the physics objects.
-    objs.push(createPlane({ color: [0.8, 0.8, 0.8] }))
-
-    // create wall.
-    var WALL_HEIGHT = 12
-    var WALL_WIDTH = 30
-    for (var i = 0; i < WALL_HEIGHT; i++) {
-      for (var j = 0; j < WALL_WIDTH; j++) {
-        var x = i * i + 2.1
-        var z = j * j + 2.5
-        var c = [
-          ((Math.abs(3 * x + 5 * z + 100) % 10) / 10) * 0.64,
-          ((Math.abs(64 * x + x * z + 23) % 13) / 13) * 0.67,
-          ((Math.abs(143 * x * z + x * z * z + 19) % 11) / 11) * 0.65
-        ]
-
-        objs.push(createBox({ color: c, position: [0.0, 0.5 + i * 1.0, -5.0 + 2.0 * (j - WALL_WIDTH / 2)], size: [1.0, 1.0, 2.0] }))
-      }
-    }
-
-    mb.on('down', function () {
-      objs.push(shootSphere())
-    })
-
-    regl.frame(({ tick }) => {
-      regl.clear({
-        color: [0, 0, 0, 255],
-        depth: 1
-      })
-
-      // step simulation
-      physicsWorld.stepSimulation(1.0 / 60.0, 10)
-
-      // render physics world.
-      globalScope(() => {
-        for (var i = 0; i < objs.length; i++) {
-          var o = objs[i]
-          drawNormal(() => {
-            o.drawCall.draw({ model: getModelMatrix(o.rigidBody), color: o.color })
-          })
+      var f = m.mesh.elements[j]
+      // apply model matrix on the triangle.
+      var tri =
+          [vec3.transformMat4([], m.mesh.position[f[0]], modelMatrix),
+            vec3.transformMat4([], m.mesh.position[f[1]], modelMatrix),
+            vec3.transformMat4([], m.mesh.position[f[2]], modelMatrix)
+          ]
+      var res = []
+      var t = intersectTriangle(res, rayPoint, rayDir, tri)
+      if (t !== null) {
+        if (t < minT) {
+          // mesh was closer than any object thus far.
+          // for the time being, make it the selected object.
+          minT = t
+          iSelectedMesh = i
+          break
         }
+      }
+    }
+  }
+})
+
+regl.frame(({ tick }) => {
+  regl.clear({
+    color: [0, 0, 0, 255],
+    depth: 1
+  })
+
+  globalScope(() => {
+    var m
+    for (var i = 0; i < meshes.length; i++) {
+
+      m = meshes[i]
+      if (i !== iSelectedMesh) {
+        // then draw object normally.
+        drawNormal(() => {
+          m.mesh.draw(m)
+        })
+      }
+    }
+
+    // we need to render the selected object last.
+    if (iSelectedMesh !== -1) {
+      m = meshes[iSelectedMesh]
+
+      drawOutline(() => {
+        m.isRound = (m.mesh !== boxMesh)
+        m.mesh.draw(m)
       })
-    })
+
+      // then draw object normally.
+      drawNormal(() => {
+        m.mesh.draw(m)
+      })
+    }
+  })
+})
+
   }
 }
 </script>

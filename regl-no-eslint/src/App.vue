@@ -73,12 +73,14 @@ function intersectTriangle (out, pt, dir, tri) {
   // out[2] = pt[2] + t * dir[2]
   // return t
 //#endregion
+
   var [a,b,c] = tri;
+  //edge1
   var e1 = vec3.sub([],a,c)
+  //edge2
   var e2 = vec3.sub([],b,c)
   var normal = vec3.cross([],e1,e2)
   var pointToTri = vec3.sub([],c,pt)
-  var rayDelta = vec3.dot([],dir,normal)
   var vp = vec3.dot(dir,normal)
   var wp = vec3.dot(pointToTri,normal)
   if(vp <= 0.000001 ){
@@ -95,7 +97,7 @@ function intersectTriangle (out, pt, dir, tri) {
   var d1 = vec3.dot(normal,c1)
   var d2 = vec3.dot(normal,c2)
   var d3 = vec3.dot(normal,c3)
-
+  vec3.copy(out,pointInTri)
   var interect =  d1 > 0 && d2 > 0 && d3 > 0 
   if(interect){
     return vec3.len(vec3.sub([],pt,pointToTri))
